@@ -1,13 +1,93 @@
-import requests
-from bs4 import BeautifulSoup
+import os
+import random
+import zipfile
+
+from selenium.webdriver.chrome.options import Options
+from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
 
 
-url = 'https://www.kogan.com/au/c/bed-frames/'
+def get_driver(use_proxy=False, user_agent: list = None, ip_proxy: str = None, port: int = None, username: str = None,
+               password: str = None, debug=True):
+    """Selenium setup"""
+    options = Options()
 
-r = requests.get(url)
-s = BeautifulSoup(r.text, 'html.parser')
+    if use_proxy:
+        print(f'Using Proxy: {ip_proxy}:{port}')
+        try:
+            os.mkdir('temp/plugins')
+        except FileExistsError:
+            pass
 
-barang = s.find('div', {'class':'_3dbuB _2TkM7 _1tVxb tVqMg'})
-nama_barang = s.find('div', {'class':'_2_1T4 _3NIzE'})
-print(s)
+        manifest_json = """
+{
+   "version": "1.0.0",
+   "manifest_version": 2,
+   "name": "Chrome Proxy",
+   "permissions": [
+       "proxy",
+       "tabs",
+       "unlimitedStorage",
+       "storage",
+       "<all_urls>",
+       "webRequest",
+       "webRequestBlocking"
+   ],
+   "background": {
+       "scripts": ["background.js"]
+   },
+   "minimum_chrome_version":"22.0.0"
+}
+"""
 
+        background_js = """
+var config = {
+       mode: "fixed_servers",
+       rules: {
+       singleProxy: {
+           scheme: "http",
+           host: "%s",
+           port: parseInt(%s)
+       },
+       bypassList: ["localhost"]
+       }
+   };
+   chrome.proxy.settings.set({value: config, scope: "regular"}, function() {});
+function callbackFn(details) {
+   return {
+       authCredentials: {
+           username: "%s",
+           password: "%s"
+       }
+   };
+}
+chrome.webRequest.onAuthRequired.addListener(
+           callbackFn,
+           {urls: ["<all_urls>"]},
+           ['blocking']
+);
+                       """ % (ip_proxy, port, username, password)
+
+        plugin_file = 'temp/plugins/proxy_auth.zip'
+        with zipfile.ZipFile(plugin_file, 'w') as zp:
+            zp.writestr("manifest.json", manifest_json)
+            zp.writestr("background.js", background_js)
+
+        # raise Exception(plugin_file)
+        options.add_extension(plugin_file)
+        options.add_argument(argument=f'argument={random.choice(user_agent)}')
+        if not debug:
+            options.add_argument(argument='--headless')
+        driver = webdriver.Chrome(ChromeDriverManager(path='E:/RWID/chromedriver_win32/chromedriver.exe').install(), options=options)
+        return driver
+
+    else:
+        options.add_argument(argument=f'user-agent={random.choice(user_agent)}')
+        options.add_argument(argument='--incognito')
+        if not debug:
+            options.add_argument(argument='--headless')
+        driver = webdriver.Chrome(ChromeDriverManager(path='E:/RWID/chromedriver_win32/chromedriver.exe').install(), options=options)
+        return driver
+
+if __name__ == '__main__':
+    get_driver()
